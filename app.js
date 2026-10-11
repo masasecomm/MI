@@ -636,7 +636,16 @@ function renderOverview() {
     button.type = "button";
     button.textContent = "Open dashboard →";
     button.dataset.openBusiness = business.id;
-    card.append(content, button);
+    const actions = document.createElement("div");
+    actions.className = "business-card-actions";
+    actions.append(button);
+    const update = appendText(actions, "button", "row-action", "Update");
+    update.type = "button";
+    update.dataset.editBusiness = business.id;
+    const remove = appendText(actions, "button", "row-action row-action-delete", "Delete");
+    remove.type = "button";
+    remove.dataset.deleteBusiness = business.id;
+    card.append(content, actions);
     if (logo && business.logo_url) logo.onerror = () => {
       logo.remove();
       const fallback = document.createElement("span");
@@ -867,9 +876,18 @@ function renderClients() {
     const edit = document.createElement("button");
     edit.className = "row-action";
     edit.type = "button";
-    edit.textContent = "Edit";
+    edit.textContent = "Update";
     edit.dataset.editClient = client.id;
-    card.append(detail, documents, edit);
+    const actions = document.createElement("div");
+    actions.className = "client-card-actions";
+    actions.append(documents, edit);
+    const remove = document.createElement("button");
+    remove.className = "row-action row-action-delete";
+    remove.type = "button";
+    remove.textContent = "Delete";
+    remove.dataset.deleteClient = client.id;
+    actions.append(remove);
+    card.append(detail, actions);
     container.append(card);
   });
   $("#clients-empty").hidden = matching.length !== 0;
@@ -900,7 +918,9 @@ function renderProducts() {
   const catalog = businessProducts(businessId);
   const sales = productSales(businessId);
   const search = $("#product-search").value.trim().toLowerCase();
-  const filtered = catalog.filter((product) => product.name.toLowerCase().includes(search));
+  const filtered = catalog.filter((product) =>
+    [product.name, product.description].some((value) => (value || "").toLowerCase().includes(search)),
+  );
   const byKey = new Map(sales.map((entry) => [entry.key, entry]));
   const productRows = filtered.map((product) => {
     const key = `${product.business_id}:${product.currency}:${productNameKey(product.name)}`;
@@ -952,14 +972,15 @@ function renderProducts() {
   productRows.forEach(({ product, sale }) => {
     const row = document.createElement("tr");
     appendText(row, "td", "", product.name);
+    appendText(row, "td", "product-description", product.description || "—");
     appendText(row, "td", "", String(sale.quantity));
     appendText(row, "td", "product-buyers", [...sale.buyers].join(", ") || "No sales yet");
     appendText(row, "td", "", currencyAmount(sale.sales, product.currency));
     appendText(row, "td", "", currencyAmount(sale.cost, product.currency));
     appendText(row, "td", "", currencyAmount(sale.profit, product.currency));
     const actions = document.createElement("td");
-    [["Edit", "edit"], ["New invoice", "new-invoice"]].forEach(([label, action]) => {
-      const button = appendText(actions, "button", "row-action", label);
+    [["Update", "edit"], ["Delete", "delete"], ["New invoice", "new-invoice"]].forEach(([label, action]) => {
+      const button = appendText(actions, "button", action === "delete" ? "row-action row-action-delete" : "row-action", label);
       button.type = "button";
       button.dataset.productAction = action;
       button.dataset.productId = product.id;
@@ -1153,7 +1174,9 @@ function populateProductOptions() {
   uniqueProducts.forEach((product) => {
     const option = document.createElement("option");
     option.value = product.name;
-    option.label = `${product.currency} ${Number(product.unit_price).toFixed(2)} · cost ${Number(product.unit_cost || 0).toFixed(2)}`;
+    option.label = [product.description, `${product.currency} ${Number(product.unit_price).toFixed(2)} · cost ${Number(product.unit_cost || 0).toFixed(2)}`]
+      .filter(Boolean)
+      .join(" · ");
     options.append(option);
   });
 }
@@ -2115,7 +2138,7 @@ async function runDocumentAction(action, invoice, button) {
     return;
   }
   if (action === "delete") {
-    if (!window.confirm(`Delete ${invoice.document_type} ${invoice.invoice_number}? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete ${invoice.document_type} ${invoice.invoice_number} and its payment history? This cannot be undone.`)) return;
     const { error } = await supabase.from("invoices").delete().eq("id", invoice.id);
     if (error) {
       showMessage($("#document-dialog-message"), `Could not delete document: ${error.message}`);
@@ -2216,8 +2239,8 @@ function resetBusinessForm(business = null) {
   $("#profile-business-address").value = business?.address || "";
   $("#business-logo-file").value = "";
   $("#business-form-eyebrow").textContent = business ? "EDIT BUSINESS" : "BUSINESS PROFILE";
-  $("#business-form-heading").textContent = business ? "Edit business" : "Create a business";
-  $("#save-business").innerHTML = business ? "Save changes <span aria-hidden=\"true\">→</span>" : "Save business <span aria-hidden=\"true\">→</span>";
+  $("#business-form-heading").textContent = business ? "Update business" : "Create a business";
+  $("#save-business").innerHTML = business ? "Update business <span aria-hidden=\"true\">→</span>" : "Save business <span aria-hidden=\"true\">→</span>";
   const preview = $("#business-logo-preview");
   const placeholder = $("#business-logo-placeholder");
   if (business?.logo_url) {
@@ -2276,6 +2299,91 @@ async function saveBusiness(event) {
   }
 }
 
+async function deleteBusiness(business) {
+  const clientsToDelete = businessClients(business.id);
+  const documentsToDelete = businessDocuments(business.id);
+  const productsToDelete = businessProducts(business.id);
+  const paymentCount = documentsToDelete.reduce(
+    (count, invoice) => count + invoicePayments(invoice).length,
+    0,
+  );
+  const details = [
+    `${clientsToDelete.length} client${clientsToDelete.length === 1 ? "" : "s"}`,
+    `${documentsToDelete.length} document${documentsToDelete.length === 1 ? "" : "s"}`,
+    `${productsToDelete.length} product${productsToDelete.length === 1 ? "" : "s"}`,
+    `${paymentCount} payment${paymentCount === 1 ? "" : "s"}`,
+  ].join(", ");
+  if (!window.confirm(`Permanently delete "${business.name}" and all its data (${details})? This cannot be undone.`)) return;
+
+  let logoPath = null;
+  let logoPathError = null;
+  if (business.logo_url) {
+    try {
+      const marker = `/storage/v1/object/public/${LOGO_BUCKET}/`;
+      const pathname = new URL(business.logo_url).pathname;
+      const markerIndex = pathname.indexOf(marker);
+      if (markerIndex < 0) throw new Error("The stored logo URL is not in the expected storage bucket.");
+      logoPath = decodeURIComponent(pathname.slice(markerIndex + marker.length));
+      if (!logoPath.startsWith(`${currentUser.id}/${business.id}/`)) {
+        throw new Error("The logo URL does not belong to this business.");
+      }
+    } catch (error) {
+      logoPathError = error.message || "The logo storage path could not be determined.";
+    }
+  }
+  let result;
+  try {
+    result = await supabase
+      .from("businesses")
+      .delete()
+      .eq("id", business.id)
+      .select("id")
+      .maybeSingle();
+  } catch (error) {
+    showMessage($("#overview-message"), `Could not confirm business deletion: ${error.message || "The request failed."} Reload the workspace before trying again.`);
+    return;
+  }
+  const { data, error } = result;
+  if (error) {
+    showMessage($("#overview-message"), `Could not delete business: ${error.message}`);
+    return;
+  }
+  if (!data) {
+    showMessage($("#overview-message"), "Could not delete business: it was not found or is no longer accessible.");
+    return;
+  }
+
+  let loaded;
+  try {
+    loaded = await loadWorkspace();
+  } catch (error) {
+    showMessage($("#overview-message"), `Business deleted, but the workspace could not refresh: ${error.message || "The request failed."} Reload to see the changes.`);
+    return;
+  }
+  if (!loaded) {
+    showMessage($("#overview-message"), "Business deleted, but the workspace could not refresh. Reload to see the changes.");
+    return;
+  }
+  setView("overview");
+  if (logoPathError) {
+    showMessage($("#overview-message"), `Business and its data were deleted, but its logo could not be removed: ${logoPathError}`);
+    return;
+  }
+  if (logoPath) {
+    let logoError;
+    try {
+      ({ error: logoError } = await supabase.storage.from(LOGO_BUCKET).remove([logoPath]));
+    } catch (error) {
+      logoError = error;
+    }
+    if (logoError) {
+      showMessage($("#overview-message"), `Business and its data were deleted, but its logo could not be removed: ${logoError.message}`);
+      return;
+    }
+  }
+  showMessage($("#overview-message"), `"${business.name}" and its data were deleted.`, true);
+}
+
 function resetClientForm(client = null) {
   if (!client && !businesses.length) {
     resetBusinessForm();
@@ -2284,7 +2392,8 @@ function resetClientForm(client = null) {
   }
   $("#client-form").reset();
   $("#client-edit-id").value = client?.id || "";
-  $("#client-form-title").textContent = client ? "Edit client" : "Add a client";
+  $("#client-form-title").textContent = client ? "Update client" : "Add a client";
+  $("#save-client").textContent = client ? "Update client" : "Save client";
   $("#saved-client-business").value = client?.business_id || selectedBusinessId || businesses[0]?.id || "";
   $("#saved-client-name").value = client?.name || "";
   $("#saved-client-company").value = client?.company_name || "";
@@ -2320,16 +2429,63 @@ async function saveClient(event) {
   showMessage($("#clients-message"), id ? "Client updated." : "Client saved.", true);
 }
 
+async function deleteClient(client) {
+  const documents = clientInvoices(client);
+  const company = client.company_name ? ` (${client.company_name})` : "";
+  const message = documents.length
+    ? `Delete ${client.name}${company} from the client directory? Its ${documents.length} saved document${documents.length === 1 ? "" : "s"} will remain with their client details and payment history; they will no longer be linked to this client.`
+    : `Permanently delete ${client.name}${company} from the client directory? This cannot be undone.`;
+  if (!window.confirm(message)) return;
+
+  let result;
+  try {
+    result = await supabase
+      .from("clients")
+      .delete()
+      .eq("id", client.id)
+      .select("id")
+      .maybeSingle();
+  } catch (error) {
+    showMessage($("#clients-message"), `Could not confirm client deletion: ${error.message || "The request failed."} Reload the workspace before trying again.`);
+    return;
+  }
+  const { data, error } = result;
+  if (error) {
+    showMessage($("#clients-message"), `Could not delete client: ${error.message}`);
+    return;
+  }
+  if (!data) {
+    showMessage($("#clients-message"), "Could not delete client: it was not found or is no longer accessible.");
+    return;
+  }
+  $("#client-form-panel").hidden = true;
+  let loaded;
+  try {
+    loaded = await loadWorkspace();
+  } catch (error) {
+    showMessage($("#clients-message"), `Client deleted, but the workspace could not refresh: ${error.message || "The request failed."} Reload to see the changes.`);
+    return;
+  }
+  if (!loaded) {
+    showMessage($("#clients-message"), "Client deleted, but the workspace could not refresh. Reload to see the changes.");
+    return;
+  }
+  setView("clients");
+  showMessage($("#clients-message"), `${client.name} was deleted from the client directory.`, true);
+}
+
 function resetProductForm(product = null) {
   $("#product-form").reset();
   $("#product-edit-id").value = product?.id || "";
   $("#product-name").value = product?.name || "";
+  $("#product-description").value = product?.description || "";
   $("#product-currency").value = product?.currency || $("#currency").value || "ZAR";
   $("#product-unit-price").value = product?.unit_price ?? "";
   $("#product-unit-cost").value = product?.unit_cost ?? "";
-  $("#product-form-title").textContent = product ? "Edit product" : "Add a product";
-  $("#product-save").textContent = product ? "Save product changes" : "Save product";
-  $("#product-form-cancel").hidden = !product;
+  $("#product-form-title").textContent = product ? "Update product" : "Add a product";
+  $("#product-save").textContent = product ? "Update product" : "Save product";
+  $("#product-form-cancel").hidden = false;
+  $("#product-form-panel").hidden = false;
   $("#product-name").focus();
 }
 
@@ -2351,6 +2507,7 @@ async function saveProduct(event) {
     user_id: currentUser.id,
     business_id: selectedBusinessId,
     name: $("#product-name").value.trim(),
+    description: $("#product-description").value.trim(),
     currency,
     unit_price: Number($("#product-unit-price").value),
     unit_cost: Number($("#product-unit-cost").value),
@@ -2367,18 +2524,58 @@ async function saveProduct(event) {
     showMessage($("#products-message"), `Could not save product: ${result.error.message}`);
     return;
   }
-  await loadWorkspace();
+  let loaded;
+  try {
+    loaded = await loadWorkspace();
+  } catch (error) {
+    showMessage($("#products-message"), `Product saved, but the catalogue could not refresh: ${error.message || "The request failed."}`);
+    return;
+  }
+  if (!loaded) {
+    showMessage($("#products-message"), "Product saved, but the catalogue could not refresh. Reload to see the changes.");
+    return;
+  }
   resetProductForm();
   showMessage($("#products-message"), editId || existing ? "Product updated." : "Product added.", true);
 }
 
-function handleProductAction(event) {
+async function deleteProduct(product) {
+  if (!window.confirm(`Delete "${product.name}" from the product catalogue? Existing invoices and their saved product costs will not change.`)) return;
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", product.id)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      showMessage($("#products-message"), "Could not delete product: it was not found or is no longer accessible.");
+      return;
+    }
+    const loaded = await loadWorkspace();
+    if (!loaded) {
+      showMessage($("#products-message"), "Product deleted, but the catalogue could not refresh. Reload to see the changes.");
+      return;
+    }
+    resetProductForm();
+    showMessage($("#products-message"), `${product.name} was deleted from the catalogue.`, true);
+  } catch (error) {
+    showMessage($("#products-message"), `Could not delete product: ${error.message || "The request failed."}`);
+  }
+}
+
+async function handleProductAction(event) {
   const button = event.target.closest("button[data-product-action]");
   if (!button) return;
   const product = products.find((entry) => entry.id === button.dataset.productId);
   if (!product) return;
   if (button.dataset.productAction === "edit") {
     resetProductForm(product);
+    return;
+  }
+  if (button.dataset.productAction === "delete") {
+    await deleteProduct(product);
     return;
   }
   if (button.dataset.productAction === "new-invoice") {
@@ -2459,6 +2656,10 @@ $("#add-business").addEventListener("click", () => resetBusinessForm());
 $("#overview-add-business").addEventListener("click", () => resetBusinessForm());
 $("#overview-create-first").addEventListener("click", () => resetBusinessForm());
 $("#edit-business").addEventListener("click", () => resetBusinessForm(currentBusiness()));
+$("#delete-business").addEventListener("click", () => {
+  const business = currentBusiness();
+  if (business) deleteBusiness(business);
+});
 $("#business-form").addEventListener("submit", saveBusiness);
 $("#business-logo-file").addEventListener("change", (event) => {
   const file = event.target.files[0];
@@ -2481,13 +2682,29 @@ $("#business-logo-file").addEventListener("change", (event) => {
   showMessage($("#business-form-message"), "");
 });
 $("#cancel-business-form").addEventListener("click", () => setView(editingBusinessId ? "business" : "overview"));
-$("#cancel-business-form-top").addEventListener("click", () => setView(editingBusinessId ? "business" : "overview"));
+$("#close-business-form").addEventListener("click", () => setView(editingBusinessId ? "business" : "overview"));
 $("#overview-new-document").addEventListener("click", () => startNewDocument());
 $("#business-new-document").addEventListener("click", () => startNewDocument());
 $("#business-empty-new").addEventListener("click", () => startNewDocument());
 $("#new-invoice").addEventListener("click", () => startNewDocument());
 $("#empty-new-invoice").addEventListener("click", () => startNewDocument());
 $("#overview-business-list").addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-delete-business]");
+  if (deleteButton) {
+    const business = businesses.find((entry) => entry.id === deleteButton.dataset.deleteBusiness);
+    if (business) deleteBusiness(business);
+    return;
+  }
+  const updateButton = event.target.closest("[data-edit-business]");
+  if (updateButton) {
+    const business = businesses.find((entry) => entry.id === updateButton.dataset.editBusiness);
+    if (business) {
+      selectedBusinessId = business.id;
+      updateBusinessSwitcher();
+      resetBusinessForm(business);
+    }
+    return;
+  }
   const button = event.target.closest("[data-open-business]");
   if (!button) return;
   selectedBusinessId = button.dataset.openBusiness;
@@ -2497,11 +2714,21 @@ $("#overview-business-list").addEventListener("click", (event) => {
 });
 $("#show-client-form").addEventListener("click", () => resetClientForm());
 $("#clients-empty-add").addEventListener("click", () => resetClientForm());
-$("#cancel-client-form").addEventListener("click", () => { $("#client-form-panel").hidden = true; });
+$("#close-client-form").addEventListener("click", () => {
+  $("#client-form-panel").hidden = true;
+  $("#client-form").reset();
+  $("#client-edit-id").value = "";
+});
 $("#cancel-client").addEventListener("click", () => { $("#client-form-panel").hidden = true; });
 $("#client-form").addEventListener("submit", saveClient);
 $("#client-search").addEventListener("input", renderClients);
 $("#client-card-grid").addEventListener("click", (event) => {
+  const deleteButton = event.target.closest("[data-delete-client]");
+  if (deleteButton) {
+    const client = clients.find((entry) => entry.id === deleteButton.dataset.deleteClient);
+    if (client) deleteClient(client);
+    return;
+  }
   const documentsButton = event.target.closest("[data-client-documents]");
   if (documentsButton) {
     const client = clients.find((entry) => entry.id === documentsButton.dataset.clientDocuments);
@@ -2559,6 +2786,12 @@ $("#document-dialog-close").addEventListener("click", () => $("#document-dialog"
 $("#client-documents-close").addEventListener("click", () => $("#client-documents-dialog").close());
 $("#product-form").addEventListener("submit", saveProduct);
 $("#product-form-cancel").addEventListener("click", () => resetProductForm());
+$("#close-product-form").addEventListener("click", () => {
+  resetProductForm();
+  $("#product-form-panel").hidden = true;
+  $("#show-product-form").focus();
+});
+$("#show-product-form").addEventListener("click", () => resetProductForm());
 $("#product-search").addEventListener("input", renderProducts);
 $("#product-rows").addEventListener("click", handleProductAction);
 $("#product-sales-rows").addEventListener("click", handleDocumentAction);
@@ -2586,7 +2819,7 @@ $("#deposit-percent").addEventListener("input", () => {
 $("#payment-cancel").addEventListener("click", () => $("#payment-dialog").close());
 $("#payment-close").addEventListener("click", () => $("#payment-dialog").close());
 $("#back-to-dashboard").addEventListener("click", () => setView("dashboard"));
-$("#cancel-edit").addEventListener("click", () => setView("business"));
+$("#close-invoice-editor").addEventListener("click", () => setView("business"));
 $("#mobile-cancel").addEventListener("click", () => setView("business"));
 $("#save-invoice").addEventListener("click", saveInvoice);
 $("#mobile-save").addEventListener("click", saveInvoice);

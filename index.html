@@ -99,7 +99,7 @@
             <span class="business-logo-fallback" id="business-logo-fallback" aria-hidden="true">M</span>
             <div><span class="eyebrow">BUSINESS DASHBOARD</span><h1 id="business-title">Business</h1><p class="muted" id="business-subtitle">Your business at a glance.</p></div>
           </div>
-          <div class="heading-actions"><button class="button button-secondary" id="edit-business" type="button">Edit business</button><button class="button button-primary" id="business-new-document" type="button"><span class="button-plus" aria-hidden="true">+</span> New document</button></div>
+          <div class="heading-actions"><button class="button button-secondary" id="edit-business" type="button">Update</button><button class="button button-secondary button-danger" id="delete-business" type="button">Delete</button><button class="button button-primary" id="business-new-document" type="button"><span class="button-plus" aria-hidden="true">+</span> New document</button></div>
         </div>
         <p class="form-message" id="business-message" role="status" aria-live="polite"></p>
         <div class="summary-grid">
@@ -127,7 +127,7 @@
         <p class="form-message" id="clients-message" role="status" aria-live="polite"></p>
         <div class="summary-grid summary-grid-two"><article class="summary-card"><span class="summary-label">Total clients</span><strong class="summary-value" id="clients-total">0</strong><span class="summary-hint">Across your businesses</span><span class="summary-icon icon-green" aria-hidden="true">♙</span></article><article class="summary-card"><span class="summary-label">Businesses represented</span><strong class="summary-value" id="clients-business-count">0</strong><span class="summary-hint">With saved client contacts</span><span class="summary-icon icon-violet" aria-hidden="true">⌂</span></article></div>
         <section class="panel client-form-panel" id="client-form-panel" hidden>
-          <div class="panel-heading"><div><h2 id="client-form-title">Add a client</h2><p class="muted">Client details are kept private to this business.</p></div><button class="row-action" id="cancel-client-form" type="button">Cancel</button></div>
+          <div class="panel-heading"><div><h2 id="client-form-title">Add a client</h2><p class="muted">Client details are kept private to this business.</p></div><button class="dialog-close" id="close-client-form" type="button" aria-label="Close client form">×</button></div>
           <form id="client-form" class="client-form-grid">
             <input id="client-edit-id" type="hidden">
             <div class="form-field"><label for="saved-client-business">Business</label><select id="saved-client-business" required></select></div>
@@ -147,7 +147,7 @@
       </section>
 
       <section id="business-form-view" class="page-wrap editor-wrap" hidden>
-        <div class="page-heading editor-heading"><div><button class="back-link" id="cancel-business-form-top" type="button"><span aria-hidden="true">←</span> Back to overview</button><span class="eyebrow" id="business-form-eyebrow">BUSINESS PROFILE</span><h1 id="business-form-heading">Create a business</h1></div><div class="editor-actions"><button class="button button-secondary" id="cancel-business-form" type="button">Cancel</button><button class="button button-primary" id="save-business" type="submit" form="business-form">Save business <span aria-hidden="true">→</span></button></div></div>
+        <div class="page-heading editor-heading"><div><span class="eyebrow" id="business-form-eyebrow">BUSINESS PROFILE</span><h1 id="business-form-heading">Create a business</h1></div><div class="editor-actions"><button class="button button-primary" id="save-business" type="submit" form="business-form">Save business <span aria-hidden="true">→</span></button><button class="dialog-close" id="close-business-form" type="button" aria-label="Close business form">×</button></div></div>
         <p class="form-message" id="business-form-message" role="status" aria-live="polite"></p>
         <form id="business-form" class="panel form-panel business-form">
           <input id="business-edit-id" type="hidden">
@@ -161,6 +161,7 @@
             <div><span class="field-label">Business logo</span><p class="muted">PNG, JPEG, WebP, or SVG. Maximum file size: 2 MB.</p></div>
             <div class="logo-upload-control"><img id="business-logo-preview" alt="Business logo preview" hidden><span id="business-logo-placeholder" class="business-logo-fallback">M</span><label class="button button-secondary" for="business-logo-file">Choose logo</label><input id="business-logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml"></div>
           </div>
+          <div class="client-form-actions field-full"><button class="button button-secondary" id="cancel-business-form" type="button">Cancel</button></div>
         </form>
       </section>
 
@@ -232,9 +233,9 @@
               <h1 id="editor-title">Create a document</h1>
           </div>
           <div class="editor-actions">
-            <button class="button button-secondary" id="cancel-edit" type="button">Cancel</button>
             <button class="button button-secondary" id="download-editor-pdf" type="button">Download PDF</button>
             <button class="button button-primary" id="save-invoice" type="button">Save document <span aria-hidden="true">→</span></button>
+            <button class="dialog-close" id="close-invoice-editor" type="button" aria-label="Close document editor">×</button>
           </div>
         </div>
         <p class="form-message" id="editor-message" role="status" aria-live="polite"></p>
@@ -317,7 +318,7 @@
       </section>
 
         <section id="products-view" class="page-wrap" hidden>
-          <div class="page-heading"><div><span class="eyebrow">PRODUCTS & PROFIT</span><h1>Products</h1><p class="muted">Track what you sell, who buys it, and profit after unit costs.</p></div></div>
+          <div class="page-heading"><div><span class="eyebrow">PRODUCTS & PROFIT</span><h1>Products</h1><p class="muted">Track what you sell, who buys it, and profit after unit costs.</p></div><button class="button button-primary" id="show-product-form" type="button"><span class="button-plus" aria-hidden="true">+</span> Add product</button></div>
           <p class="form-message" id="products-message" role="status" aria-live="polite"></p>
           <div class="summary-grid summary-grid-four">
             <article class="summary-card"><span class="summary-label">Products</span><strong class="summary-value" id="products-count">0</strong><span class="summary-hint">In this business</span></article>
@@ -329,20 +330,21 @@
             <section class="panel analytics-panel"><div class="panel-heading"><div><h2>Best sellers</h2><p class="muted">Ranked by quantity sold.</p></div></div><div id="products-bestseller-chart" class="business-chart"></div></section>
             <section class="panel analytics-panel"><div class="panel-heading"><div><h2>Profit by product</h2><p class="muted">Positive profit and negative product margins are shown separately.</p></div></div><div id="products-profit-chart" class="business-chart"></div></section>
           </div>
-          <section class="panel client-form-panel">
-            <div class="panel-heading"><div><h2 id="product-form-title">Add a product</h2><p class="muted">Set a selling price and your cost per unit.</p></div><button class="row-action" id="product-form-cancel" type="button" hidden>Cancel edit</button></div>
-            <form id="product-form" class="client-form-grid">
+          <section class="panel client-form-panel" id="product-form-panel">
+            <div class="panel-heading"><div><h2 id="product-form-title">Add a product</h2><p class="muted">Set a selling price and your cost per unit.</p></div><button class="dialog-close" id="close-product-form" type="button" aria-label="Close product form">×</button></div>
+            <form id="product-form" class="client-form-grid product-form-grid">
               <input id="product-edit-id" type="hidden">
-              <div class="form-field"><label for="product-name">Product name</label><input id="product-name" maxlength="240" required></div>
-              <div class="form-field"><label for="product-currency">Currency</label><input id="product-currency" value="ZAR" maxlength="3" pattern="[A-Za-z]{3}" required></div>
-              <div class="form-field"><label for="product-unit-price">Selling price per unit</label><input id="product-unit-price" type="number" min="0" step="0.01" required></div>
-              <div class="form-field"><label for="product-unit-cost">Cost per unit</label><input id="product-unit-cost" type="number" min="0" step="0.01" required></div>
-              <div class="client-form-actions field-full"><button class="button button-primary" id="product-save" type="submit">Save product</button></div>
+              <div class="form-field product-name-field"><label for="product-name">Product name</label><input id="product-name" maxlength="240" required></div>
+              <div class="form-field field-full"><label for="product-description">Description <span class="optional">OPTIONAL</span></label><textarea id="product-description" rows="2" maxlength="1000" placeholder="Describe this product"></textarea></div>
+              <div class="form-field product-compact-field"><label for="product-currency">Currency</label><input id="product-currency" value="ZAR" maxlength="3" pattern="[A-Za-z]{3}" required></div>
+              <div class="form-field product-compact-field"><label for="product-unit-price">Selling price per unit</label><input id="product-unit-price" type="number" min="0" step="0.01" required></div>
+              <div class="form-field product-compact-field"><label for="product-unit-cost">Cost per unit</label><input id="product-unit-cost" type="number" min="0" step="0.01" required></div>
+              <div class="client-form-actions field-full"><button class="button button-secondary" id="product-form-cancel" type="button">Cancel</button><button class="button button-primary" id="product-save" type="submit">Save product</button></div>
             </form>
           </section>
           <section class="panel invoice-panel">
             <div class="panel-heading"><div><h2>Product catalogue & sales</h2><p class="muted">Sales rows show the customer, quantity, revenue, cost, and gross profit.</p></div><label class="search-box" for="product-search"><span aria-hidden="true">⌕</span><input id="product-search" type="search" placeholder="Search products..." autocomplete="off"></label></div>
-            <div class="table-scroll"><table><thead><tr><th>PRODUCT</th><th>QTY SOLD</th><th>BUYERS</th><th>SALES</th><th>COST</th><th>GROSS PROFIT</th><th>ACTIONS</th></tr></thead><tbody id="product-rows"></tbody></table></div>
+            <div class="table-scroll"><table><thead><tr><th>PRODUCT</th><th>DESCRIPTION</th><th>QTY SOLD</th><th>BUYERS</th><th>SALES</th><th>COST</th><th>GROSS PROFIT</th><th>ACTIONS</th></tr></thead><tbody id="product-rows"></tbody></table></div>
             <div class="empty-state" id="products-empty" hidden><h3>No products yet</h3><p>Add a product above or save a new invoice to populate the catalogue.</p></div>
           </section>
           <section class="panel invoice-panel product-transactions-panel">
@@ -377,7 +379,7 @@
           <div id="document-preview"></div>
           <p class="form-message" id="document-dialog-message" role="status" aria-live="polite"></p>
           <div class="document-dialog-actions">
-            <button class="button button-secondary" data-document-action="edit" type="button">Edit</button>
+            <button class="button button-secondary" data-document-action="edit" type="button">Update</button>
             <button class="button button-secondary" data-document-action="duplicate" type="button" hidden>Create new invoice from this</button>
             <button class="button button-secondary" data-document-action="pdf" type="button">Download PDF</button>
             <button class="button button-secondary" data-document-action="print" type="button">Print</button>

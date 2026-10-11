@@ -37,6 +37,7 @@ create table if not exists public.products (
   user_id uuid not null references auth.users (id) on delete cascade,
   business_id uuid not null references public.businesses (id) on delete cascade,
   name text not null check (char_length(name) between 1 and 240),
+  description text not null default '' check (char_length(description) <= 1000),
   unit_price numeric(12, 2) not null check (unit_price >= 0),
   unit_cost numeric(12, 2) not null default 0 check (unit_cost >= 0),
   currency text not null check (currency ~ '^[A-Z]{3}$'),
@@ -46,6 +47,9 @@ create table if not exists public.products (
 );
 
 alter table public.products add column if not exists unit_cost numeric(12, 2) not null default 0;
+alter table public.products add column if not exists description text not null default '';
+alter table public.products drop constraint if exists products_description_check;
+alter table public.products add constraint products_description_check check (char_length(description) <= 1000);
 alter table public.products drop constraint if exists products_unit_cost_check;
 alter table public.products add constraint products_unit_cost_check check (unit_cost >= 0);
 

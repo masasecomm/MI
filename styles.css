@@ -186,6 +186,7 @@ td:first-child { color: #29372e; font-weight: 700; }
 .business-card-content { min-width: 0; }
 .business-card-content h3 { margin: 0 0 4px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .business-card-content p { margin: 0; color: #878e86; font-size: 10px; }
+.business-card-actions { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; }
 .business-card-open { grid-column: 1 / -1; justify-self: start; padding: 4px 0 0; border: 0; background: transparent; color: var(--green); font-size: 10px; font-weight: 700; }
 .business-card-open:hover { text-decoration: underline; }
 .business-heading { display: flex; min-width: 0; align-items: center; gap: 15px; }
@@ -208,6 +209,11 @@ td:first-child { color: #29372e; font-weight: 700; }
 .type-quote { background: #fbf2e3; color: #a87825; }
 .client-form-panel { margin-bottom: 18px; }
 .client-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; padding: 0 22px 22px; }
+.product-form-grid { grid-template-columns: minmax(85px, .65fr) repeat(2, minmax(140px, 1fr)); }
+.product-name-field, .product-form-grid > .field-full { grid-column: 1 / -1; }
+.product-form-grid .product-compact-field { max-width: 230px; }
+.product-form-grid #product-currency { max-width: 105px; }
+.product-form-grid #product-unit-price, .product-form-grid #product-unit-cost { max-width: 180px; }
 .client-form-actions { display: flex; justify-content: flex-end; gap: 9px; }
 .client-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; padding: 0 22px 22px; }
 .client-card { display: flex; min-width: 0; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid #edf0ec; border-radius: 11px; }
@@ -217,7 +223,7 @@ td:first-child { color: #29372e; font-weight: 700; }
 .client-card-detail p { margin: 0; overflow: hidden; color: #727970; font-size: 10px; line-height: 1.45; text-overflow: ellipsis; }
 .client-card-detail .client-address-text { white-space: pre-line; }
 .client-business-tag { justify-self: start; padding: 4px 7px; border-radius: 10px; background: #f1f3f0; color: #737b72; font-size: 9px; }
-.client-card > .row-action { flex: 0 0 auto; }
+.client-card-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: 5px; }
 .client-company-name { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .client-balance-line { overflow: visible !important; white-space: normal; }
 .client-documents-button { align-self: end; }
@@ -354,7 +360,9 @@ td:first-child { color: #29372e; font-weight: 700; }
 .document-dialog .print-invoice { max-width: 760px; margin: 0 auto; padding: 28px; border: 1px solid var(--line); }
 .document-dialog-actions { position: sticky; bottom: -24px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin: 16px -24px -24px; padding: 14px 24px; border-top: 1px solid var(--line); background: #fff; }
 .button-danger { border-color: #f0d3cf; }
+.button-danger:hover, .row-action-delete:hover { background: #fbefed; color: #a44235; }
 .product-transactions-panel { margin-top: 18px; }
+.product-description { min-width: 150px; max-width: 300px; white-space: normal; color: #646c64; }
 .product-buyers { min-width: 180px; max-width: 280px; white-space: normal; }
 tr[data-document-id] { cursor: pointer; }
 tr[data-document-id]:hover { background: #f4f5f6; }
@@ -444,6 +452,11 @@ tr[data-document-id]:focus-visible { outline: 2px solid #0788c9; outline-offset:
   .business-card-grid, .client-card-grid { grid-template-columns: 1fr; padding: 0 13px 15px; }
   .client-form-grid { grid-template-columns: 1fr; gap: 12px; padding: 0 15px 15px; }
   .client-form-grid .field-full, .client-form-actions { grid-column: auto; }
+  .product-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .product-form-grid .product-name-field, .product-form-grid > .field-full, .product-form-grid .client-form-actions { grid-column: 1 / -1; }
+  .product-form-grid .product-compact-field { max-width: none; }
+  .product-form-grid #product-currency { max-width: 105px; }
+  .product-form-grid #product-unit-price, .product-form-grid #product-unit-cost { max-width: 180px; }
   .logo-upload { align-items: flex-start; flex-direction: column; }
   .analytics-panel .panel-heading { padding-right: 15px; padding-left: 15px; }
   .business-chart, .status-chart, .activity-list { padding-right: 15px; padding-left: 15px; }
