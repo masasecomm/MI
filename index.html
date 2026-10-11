@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f4f5f6">
     <meta name="description" content="Create, manage, and print your invoices from anywhere.">
-    <title>Masase Commerce Invoices</title>
+    <title>Invoices</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -17,20 +17,20 @@
         <div class="auth-card">
           <div class="auth-logo">
             <span class="brand-mark" aria-hidden="true">R</span>
-            <span>Masase Commerce</span>
+            <span>Invoices</span>
           </div>
           <h1 id="auth-heading">Sign in</h1>
           <p class="muted" id="auth-description">Access your invoices and business workspace.</p>
           <p class="notice notice-info" id="setup-notice" hidden></p>
           <form id="auth-form">
             <label class="field-label" for="auth-email">Email address</label>
-            <input id="auth-email" name="email" type="email" autocomplete="username" value="masasecomm@gmail.com" readonly required>
+            <input id="auth-email" name="email" type="email" autocomplete="off" required>
             <label class="field-label" for="auth-password">Password</label>
             <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="6" placeholder="At least 6 characters" required>
             <button class="auth-reset" id="auth-reset" type="button">Forgot password?</button>
             <button class="button button-primary button-wide" id="auth-submit" type="submit">Sign in <span aria-hidden="true">→</span></button>
           </form>
-          <p class="auth-switch">Sign in with the authorized Masase Commerce account.</p>
+          <p class="auth-switch">Sign in with your authorized account.</p>
           <p class="form-message" id="auth-message" role="status" aria-live="polite"></p>
         </div>
         <p class="auth-privacy">Your invoices are private to your account.</p>
@@ -39,10 +39,7 @@
 
     <main id="app-panel" class="app-shell" hidden>
       <header class="topbar">
-        <a class="brand" href="./" aria-label="Masase invoices home">
-          <span class="brand-mark" aria-hidden="true">R</span>
-          <span>masase<span class="brand-light"> / invoices</span></span>
-        </a>
+        <div class="brand">Invoices</div>
         <nav class="workspace-nav" aria-label="Workspace">
           <button class="nav-button active" id="nav-overview" type="button">Overview</button>
           <button class="nav-button" id="nav-business" type="button">Business</button>
@@ -54,7 +51,6 @@
         <div class="account-area">
           <select id="business-switcher" class="business-switcher" aria-label="Select business"></select>
           <button class="button button-primary button-small" id="add-business" type="button">+ Business</button>
-          <span class="account-email" id="account-email"></span>
           <button class="button button-quiet button-small" id="sign-out" type="button">Sign out</button>
         </div>
       </header>

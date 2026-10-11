@@ -36,7 +36,7 @@ const LOGO_BUCKET = "business-logos";
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 const LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 const CLIENT_FIELD_IDS = ["saved-client-name", "saved-client-company", "saved-client-email", "saved-client-phone", "saved-client-address"];
-const ALLOWED_ACCOUNT_EMAIL = "masasecomm@gmail.com";
+const ALLOWED_ACCOUNT_ID = "70488693-47a5-4e7d-be88-1a0b5955e0d6";
 const INVOICE_TERMS = "Payment is due by the date shown on this invoice. Thank you for your business.";
 const QUOTE_TERMS = "This estimate is valid until the date shown. Work will begin after written acceptance.";
 
@@ -248,7 +248,6 @@ function setAuthenticated(user) {
   authPanel.hidden = Boolean(user);
   appPanel.hidden = !user;
   if (user) {
-    $("#account-email").textContent = user.email || "";
     showMessage(authMessage, "");
     if (previousUserId !== user.id) {
       setView("overview");
@@ -268,14 +267,14 @@ function setAuthenticated(user) {
 
 async function applyAuthSession(session) {
   const user = session?.user || null;
-  if (user && user.email?.toLowerCase() !== ALLOWED_ACCOUNT_EMAIL) {
+  if (user && user.id !== ALLOWED_ACCOUNT_ID) {
     const { error } = await supabase.auth.signOut();
     setAuthenticated(null);
     showMessage(
       authMessage,
       error
-        ? `This app is restricted to ${ALLOWED_ACCOUNT_EMAIL}. Sign-out also failed: ${error.message}`
-        : `This app is restricted to ${ALLOWED_ACCOUNT_EMAIL}.`,
+        ? `This account is not authorized to access this app. Sign-out also failed: ${error.message}`
+        : "This account is not authorized to access this app.",
     );
     return;
   }
@@ -2603,9 +2602,6 @@ async function handleAuth(event) {
   showMessage(authMessage, "");
   try {
     const email = $("#auth-email").value.trim();
-    if (email.toLowerCase() !== ALLOWED_ACCOUNT_EMAIL) {
-      throw new Error(`Only ${ALLOWED_ACCOUNT_EMAIL} can sign in to this app.`);
-    }
     const password = $("#auth-password").value;
     const result = await supabase.auth.signInWithPassword({ email, password });
     if (result.error) throw result.error;
@@ -2853,7 +2849,7 @@ $("#auth-reset").addEventListener("click", async () => {
   const button = $("#auth-reset");
   button.disabled = true;
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail(ALLOWED_ACCOUNT_EMAIL, {
+    const { error } = await supabase.auth.resetPasswordForEmail($("#auth-email").value.trim(), {
       redirectTo: window.location.href,
     });
     if (error) throw error;

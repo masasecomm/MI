@@ -90,7 +90,6 @@ input::placeholder, textarea::placeholder { color: #adb3ad; }
 .nav-button:hover { background: #f4f5f6; color: var(--green); }
 .nav-button.active { background: #e8f4fa; color: var(--green); }
 .account-area { display: flex; align-items: center; gap: 9px; }
-.account-email { max-width: 220px; overflow: hidden; color: #7b817a; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .business-switcher { max-width: 165px; height: 34px; padding: 0 25px 0 9px; border: 1px solid #e5e9e3; border-radius: 7px; outline: none; background: #fff; color: #4f584f; font-size: 11px; }
 .page-wrap { width: calc(100% - 48px); max-width: none; margin: 34px 24px 0; }
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
@@ -407,7 +406,6 @@ tr[data-document-id]:focus-visible { outline: 2px solid #0788c9; outline-offset:
   .business-switcher { max-width: 120px; height: 31px; font-size: 10px; }
   .account-area { gap: 6px; }
   .account-area .button-small { min-height: 31px; padding: 0 8px; font-size: 10px; }
-  .account-email { display: none; }
   .analytics-grid { grid-template-columns: 1fr; gap: 11px; }
   .business-period-grid { grid-template-columns: 1fr; gap: 11px; }
   .business-card-grid, .client-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding-right: 14px; padding-left: 14px; }
@@ -433,7 +431,6 @@ tr[data-document-id]:focus-visible { outline: 2px solid #0788c9; outline-offset:
   .brand { gap: 8px; font-size: 15px; }
   .brand-mark { width: 31px; height: 31px; }
   .account-area { margin-left: auto; gap: 5px; }
-  .account-email { display: none; }
   .business-switcher { max-width: 103px; }
   .account-area #add-business { display: none; }
   .workspace-nav { justify-content: space-between; }

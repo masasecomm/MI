@@ -219,7 +219,7 @@ language sql
 stable
 set search_path = ''
 as $$
-  select lower(coalesce(auth.jwt() ->> 'email', '')) = 'masasecomm@gmail.com';
+  select (select auth.uid()) = '70488693-47a5-4e7d-be88-1a0b5955e0d6'::uuid;
 $$;
 
 revoke all on function public.is_masasecomm_invoice_user() from public;
