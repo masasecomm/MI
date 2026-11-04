@@ -1,0 +1,12 @@
+{
+  "name": "masase-invoices-migration",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "import": "node import-supabase-export.js"
+  },
+  "dependencies": {
+    "csv-parse": "^7.0.3",
+    "firebase-admin": "^14.5.0"
+  }
+}

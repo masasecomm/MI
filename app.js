@@ -1,5 +1,18 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "./config.js";
+import {
+  deleteRecord,
+  getBusinessLogoUrl,
+  isFirebaseConfigured,
+  loadWorkspaceRecords,
+  onAuthStateChanged,
+  sendDocumentEmail,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signOut,
+  auth,
+  saveRecord,
+  uploadBusinessLogo,
+} from "./firebase-client.js";
+import { AUTHORIZED_USER_UID } from "./config.js";
 
 const $ = (selector) => document.querySelector(selector);
 const authPanel = $("#auth-panel");
@@ -32,15 +45,12 @@ const messages = [
   $("#business-form-message"),
 ];
 
-const LOGO_BUCKET = "business-logos";
 const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 const LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 const CLIENT_FIELD_IDS = ["saved-client-name", "saved-client-company", "saved-client-email", "saved-client-phone", "saved-client-address"];
-const ALLOWED_ACCOUNT_ID = "70488693-47a5-4e7d-be88-1a0b5955e0d6";
 const INVOICE_TERMS = "Payment is due by the date shown on this invoice. Thank you for your business.";
 const QUOTE_TERMS = "This estimate is valid until the date shown. Work will begin after written acceptance.";
 
-let supabase;
 let currentUser;
 let businesses = [];
 let clients = [];
@@ -61,10 +71,6 @@ let autosaveQueued = false;
 let suppressAutosave = false;
 let editorGeneration = 0;
 let invoiceNumberManuallyEdited = false;
-
-function isConfigured() {
-  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
-}
 
 function showMessage(element, message, success = false) {
   element.textContent = message;
@@ -243,13 +249,13 @@ function updateBusinessSwitcher() {
 }
 
 function setAuthenticated(user) {
-  const previousUserId = currentUser?.id;
+  const previousUserId = currentUser?.uid;
   currentUser = user;
   authPanel.hidden = Boolean(user);
   appPanel.hidden = !user;
   if (user) {
     showMessage(authMessage, "");
-    if (previousUserId !== user.id) {
+    if (previousUserId !== user.uid) {
       setView("overview");
       loadWorkspace();
     }
@@ -266,14 +272,19 @@ function setAuthenticated(user) {
 }
 
 async function applyAuthSession(session) {
-  const user = session?.user || null;
-  if (user && user.id !== ALLOWED_ACCOUNT_ID) {
-    const { error } = await supabase.auth.signOut();
+  const user = session || null;
+  if (user && (!AUTHORIZED_USER_UID || user.uid !== AUTHORIZED_USER_UID)) {
+    let signOutError;
+    try {
+      await signOut(auth);
+    } catch (error) {
+      signOutError = error;
+    }
     setAuthenticated(null);
     showMessage(
       authMessage,
-      error
-        ? `This account is not authorized to access this app. Sign-out also failed: ${error.message}`
+      signOutError
+        ? `This account is not authorized to access this app. Sign-out also failed: ${signOutError.message}`
         : "This account is not authorized to access this app.",
     );
     return;
@@ -282,25 +293,20 @@ async function applyAuthSession(session) {
 }
 
 async function loadWorkspace() {
-  if (!currentUser || !supabase) return;
-  const [businessResult, clientResult, productResult, invoiceResult, paymentResult] = await Promise.all([
-    supabase.from("businesses").select("*").order("created_at", { ascending: true }),
-    supabase.from("clients").select("*").order("name", { ascending: true }),
-    supabase.from("products").select("*").order("name", { ascending: true }),
-    supabase.from("invoices").select("*").order("created_at", { ascending: false }),
-    supabase.from("invoice_payments").select("*").order("paid_at", { ascending: false }),
-  ]);
-  const error = businessResult.error || clientResult.error || productResult.error || invoiceResult.error || paymentResult.error;
-  if (error) {
-    showMessage($("#overview-message"), `Could not load workspace: ${error.message}. Apply the latest setup in supabase/schema.sql, then reload.`);
+  if (!currentUser || !auth) return;
+  let records;
+  try {
+    records = await loadWorkspaceRecords();
+  } catch (error) {
+    showMessage($("#overview-message"), `Could not load workspace: ${error.message}. Check that Firestore is enabled and firestore.rules is deployed, then reload.`);
     return false;
   }
   const priorBusiness = selectedBusinessId;
-  businesses = businessResult.data;
-  clients = clientResult.data;
-  products = productResult.data;
-  invoices = invoiceResult.data;
-  payments = paymentResult.data;
+  businesses = records.businesses.sort((left, right) => left.created_at.localeCompare(right.created_at));
+  clients = records.clients.sort((left, right) => left.name.localeCompare(right.name));
+  products = records.products.sort((left, right) => left.name.localeCompare(right.name));
+  invoices = records.invoices.sort((left, right) => right.created_at.localeCompare(left.created_at));
+  payments = records.invoice_payments.sort((left, right) => right.paid_at.localeCompare(left.paid_at));
   selectedBusinessId = businesses.some((business) => business.id === priorBusiness)
     ? priorBusiness
     : businesses[0]?.id || null;
@@ -1539,18 +1545,19 @@ async function findOrSaveClient(invoice) {
     (client.company_name || "").toLowerCase() === invoice.client_company_name.toLowerCase(),
   );
   const clientValues = {
-    user_id: currentUser.id,
+    user_id: currentUser.uid,
     business_id: invoice.business_id,
     name: invoice.client_name,
     company_name: invoice.client_company_name,
     email: invoice.client_email,
     address: invoice.client_address,
   };
-  const query = existing
-    ? supabase.from("clients").update(clientValues).eq("id", existing.id).select().single()
-    : supabase.from("clients").insert(clientValues).select().single();
-  const { data, error } = await query;
-  if (error) throw new Error(`Document was not saved. Could not save client: ${error.message}`);
+  let data;
+  try {
+    data = await saveRecord("clients", clientValues, existing?.id);
+  } catch (error) {
+    throw new Error(`Document was not saved. Could not save client: ${error.message}`);
+  }
   clients = existing
     ? clients.map((client) => client.id === data.id ? data : client)
     : [...clients, data];
@@ -1565,18 +1572,19 @@ async function saveProducts(invoice) {
       product.currency === invoice.currency,
     );
     const productValues = {
-      user_id: currentUser.id,
+      user_id: currentUser.uid,
       business_id: invoice.business_id,
       name: item.description,
       unit_price: item.unit_price,
       unit_cost: existing ? existing.unit_cost : item.unit_cost || 0,
       currency: invoice.currency,
     };
-    const query = existing
-      ? supabase.from("products").update(productValues).eq("id", existing.id).select().single()
-      : supabase.from("products").insert(productValues).select().single();
-    const { data, error } = await query;
-    if (error) throw new Error(`Document was not saved. Could not save product "${item.description}": ${error.message}`);
+    let data;
+    try {
+      data = await saveRecord("products", productValues, existing?.id);
+    } catch (error) {
+      throw new Error(`Document was not saved. Could not save product "${item.description}": ${error.message}`);
+    }
     products = existing
       ? products.map((product) => product.id === data.id ? data : product)
       : [...products, data];
@@ -1618,11 +1626,7 @@ async function saveInvoice({ automatic = false } = {}) {
   try {
     const invoice = await findOrSaveClient(values);
     await saveProducts(invoice);
-    const query = documentId
-      ? supabase.from("invoices").update(invoice).eq("id", documentId).select().single()
-      : supabase.from("invoices").insert({ ...invoice, user_id: currentUser.id }).select().single();
-    const { data, error } = await query;
-    if (error) throw error;
+    const data = await saveRecord("invoices", invoice, documentId || undefined);
     if (!documentId && generation === editorGeneration && activeView === "editor") editingId = data.id;
     invoices = documentId
       ? invoices.map((entry) => entry.id === data.id ? data : entry)
@@ -2049,23 +2053,25 @@ async function applyPayment(event) {
   button.disabled = true;
   showMessage($("#payment-message"), "");
   try {
-    const { data, error } = await supabase.from("invoice_payments").insert({
+    const data = await saveRecord("invoice_payments", {
       invoice_id: paymentInvoice.id,
-      user_id: currentUser.id,
+      user_id: currentUser.uid,
       business_id: paymentInvoice.business_id,
       amount,
       paid_at: paidAt,
       reference: $("#payment-reference").value.trim() || null,
-    }).select().single();
-    if (error) throw error;
+    });
     payments = [...payments, data];
 
     const nextPaid = invoicePaidAmount(paymentInvoice);
     const nextStatus = nextPaid >= total - 0.005 ? "paid" : "sent";
     let statusError = null;
     if (paymentInvoice.status !== nextStatus) {
-      const result = await supabase.from("invoices").update({ status: nextStatus }).eq("id", paymentInvoice.id).select("id").maybeSingle();
-      statusError = result.error || (!result.data ? new Error("Invoice was not found while updating its payment status.") : null);
+      try {
+        await saveRecord("invoices", { status: nextStatus }, paymentInvoice.id);
+      } catch (error) {
+        statusError = error;
+      }
     }
     const savedInvoice = paymentInvoice;
     const loaded = await loadWorkspace();
@@ -2138,8 +2144,9 @@ async function runDocumentAction(action, invoice, button) {
   }
   if (action === "delete") {
     if (!window.confirm(`Permanently delete ${invoice.document_type} ${invoice.invoice_number} and its payment history? This cannot be undone.`)) return;
-    const { error } = await supabase.from("invoices").delete().eq("id", invoice.id);
-    if (error) {
+    try {
+      await deleteRecord("invoices", invoice.id);
+    } catch (error) {
       showMessage($("#document-dialog-message"), `Could not delete document: ${error.message}`);
       return;
     }
@@ -2149,13 +2156,14 @@ async function runDocumentAction(action, invoice, button) {
     return;
   }
   if (action === "convert" && invoice.document_type === "quote") {
-    const { error } = await supabase.from("invoices").update({
+    try {
+      await saveRecord("invoices", {
       document_type: "invoice",
       invoice_number: nextDocumentNumber("invoice", invoice.issue_date, invoice.client_id, invoice.business_id),
       status: "draft",
       terms: INVOICE_TERMS,
-    }).eq("id", invoice.id);
-    if (error) {
+      }, invoice.id);
+    } catch (error) {
       showMessage($("#document-dialog-message"), `Could not convert quote: ${error.message}`);
       return;
     }
@@ -2184,21 +2192,7 @@ async function runDocumentAction(action, invoice, button) {
     button.disabled = true;
     button.textContent = "Sending...";
     try {
-      const { data, error } = await supabase.functions.invoke("send-document-email", {
-        body: { invoice_id: invoice.id },
-      });
-      if (error) {
-        let details = data?.error || error.message;
-        if (error.context instanceof Response) {
-          const responseText = await error.context.text();
-          try {
-            details = JSON.parse(responseText).error || details;
-          } catch {
-            details = `Email function error: ${error.context.status} ${error.context.statusText}`;
-          }
-        }
-        throw new Error(details || "The email could not be sent.");
-      }
+      const { data } = await sendDocumentEmail(invoice.id);
       await loadWorkspace();
       showMessage($("#document-dialog-message"), data?.message || `PDF sent to ${invoice.client_email}.`, true);
     } catch (error) {
@@ -2267,25 +2261,18 @@ async function saveBusiness(event) {
       email: $("#profile-business-email").value.trim() || null,
       address: $("#profile-business-address").value.trim() || null,
     };
-    const result = editingBusinessId
-      ? await supabase.from("businesses").update(values).eq("id", editingBusinessId).select().single()
-      : await supabase.from("businesses").insert({ ...values, user_id: currentUser.id }).select().single();
-    if (result.error) throw result.error;
-    const savedBusiness = result.data;
+    const savedBusiness = await saveRecord("businesses", values, editingBusinessId || undefined);
     if (pendingLogoFile) {
       const extension = pendingLogoFile.name.split(".").pop().toLowerCase();
-      const path = `${currentUser.id}/${savedBusiness.id}/logo.${extension}`;
-      const { error: uploadError } = await supabase.storage.from(LOGO_BUCKET).upload(path, pendingLogoFile, {
-        upsert: true,
-        contentType: pendingLogoFile.type,
-      });
-      if (uploadError) {
+      const path = `business-logos/${currentUser.uid}/${savedBusiness.id}/logo.${extension}`;
+      try {
+        await uploadBusinessLogo(path, pendingLogoFile);
+      } catch (error) {
         await loadWorkspace();
-        throw new Error(`Business saved, but the logo could not be uploaded: ${uploadError.message}`);
+        throw new Error(`Business saved, but the logo could not be uploaded: ${error.message}`);
       }
-      const { data: publicUrl } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path);
-      const { error: updateError } = await supabase.from("businesses").update({ logo_url: publicUrl.publicUrl }).eq("id", savedBusiness.id);
-      if (updateError) throw new Error(`Logo uploaded, but the business profile could not be updated: ${updateError.message}`);
+      const logoUrl = await getBusinessLogoUrl(path);
+      await saveRecord("businesses", { logo_url: logoUrl, logo_path: path }, savedBusiness.id);
     }
     selectedBusinessId = savedBusiness.id;
     await loadWorkspace();
@@ -2314,72 +2301,18 @@ async function deleteBusiness(business) {
   ].join(", ");
   if (!window.confirm(`Permanently delete "${business.name}" and all its data (${details})? This cannot be undone.`)) return;
 
-  let logoPath = null;
-  let logoPathError = null;
-  if (business.logo_url) {
-    try {
-      const marker = `/storage/v1/object/public/${LOGO_BUCKET}/`;
-      const pathname = new URL(business.logo_url).pathname;
-      const markerIndex = pathname.indexOf(marker);
-      if (markerIndex < 0) throw new Error("The stored logo URL is not in the expected storage bucket.");
-      logoPath = decodeURIComponent(pathname.slice(markerIndex + marker.length));
-      if (!logoPath.startsWith(`${currentUser.id}/${business.id}/`)) {
-        throw new Error("The logo URL does not belong to this business.");
-      }
-    } catch (error) {
-      logoPathError = error.message || "The logo storage path could not be determined.";
-    }
-  }
-  let result;
   try {
-    result = await supabase
-      .from("businesses")
-      .delete()
-      .eq("id", business.id)
-      .select("id")
-      .maybeSingle();
+    await deleteRecord("businesses", business.id);
   } catch (error) {
-    showMessage($("#overview-message"), `Could not confirm business deletion: ${error.message || "The request failed."} Reload the workspace before trying again.`);
+    showMessage($("#overview-message"), `Could not delete business: ${error.message || "The request failed."}`);
     return;
   }
-  const { data, error } = result;
-  if (error) {
-    showMessage($("#overview-message"), `Could not delete business: ${error.message}`);
-    return;
-  }
-  if (!data) {
-    showMessage($("#overview-message"), "Could not delete business: it was not found or is no longer accessible.");
-    return;
-  }
-
-  let loaded;
-  try {
-    loaded = await loadWorkspace();
-  } catch (error) {
-    showMessage($("#overview-message"), `Business deleted, but the workspace could not refresh: ${error.message || "The request failed."} Reload to see the changes.`);
-    return;
-  }
+  const loaded = await loadWorkspace();
   if (!loaded) {
-    showMessage($("#overview-message"), "Business deleted, but the workspace could not refresh. Reload to see the changes.");
+    showMessage($("#overview-message"), "Business and its data were deleted, but the workspace could not refresh. Reload to see the changes.");
     return;
   }
   setView("overview");
-  if (logoPathError) {
-    showMessage($("#overview-message"), `Business and its data were deleted, but its logo could not be removed: ${logoPathError}`);
-    return;
-  }
-  if (logoPath) {
-    let logoError;
-    try {
-      ({ error: logoError } = await supabase.storage.from(LOGO_BUCKET).remove([logoPath]));
-    } catch (error) {
-      logoError = error;
-    }
-    if (logoError) {
-      showMessage($("#overview-message"), `Business and its data were deleted, but its logo could not be removed: ${logoError.message}`);
-      return;
-    }
-  }
   showMessage($("#overview-message"), `"${business.name}" and its data were deleted.`, true);
 }
 
@@ -2415,11 +2348,10 @@ async function saveClient(event) {
     phone: $("#saved-client-phone").value.trim() || null,
     address: $("#saved-client-address").value.trim() || null,
   };
-  const result = id
-    ? await supabase.from("clients").update(values).eq("id", id).select().single()
-    : await supabase.from("clients").insert({ ...values, user_id: currentUser.id }).select().single();
-  if (result.error) {
-    showMessage($("#clients-message"), `Could not save client: ${result.error.message}`);
+  try {
+    await saveRecord("clients", values, id || undefined);
+  } catch (error) {
+    showMessage($("#clients-message"), `Could not save client: ${error.message}`);
     return;
   }
   $("#client-form-panel").hidden = true;
@@ -2436,25 +2368,10 @@ async function deleteClient(client) {
     : `Permanently delete ${client.name}${company} from the client directory? This cannot be undone.`;
   if (!window.confirm(message)) return;
 
-  let result;
   try {
-    result = await supabase
-      .from("clients")
-      .delete()
-      .eq("id", client.id)
-      .select("id")
-      .maybeSingle();
+    await deleteRecord("clients", client.id);
   } catch (error) {
     showMessage($("#clients-message"), `Could not confirm client deletion: ${error.message || "The request failed."} Reload the workspace before trying again.`);
-    return;
-  }
-  const { data, error } = result;
-  if (error) {
-    showMessage($("#clients-message"), `Could not delete client: ${error.message}`);
-    return;
-  }
-  if (!data) {
-    showMessage($("#clients-message"), "Could not delete client: it was not found or is no longer accessible.");
     return;
   }
   $("#client-form-panel").hidden = true;
@@ -2503,7 +2420,7 @@ async function saveProduct(event) {
     productNameKey(product.name) === productNameKey($("#product-name").value),
   );
   const values = {
-    user_id: currentUser.id,
+    user_id: currentUser.uid,
     business_id: selectedBusinessId,
     name: $("#product-name").value.trim(),
     description: $("#product-description").value.trim(),
@@ -2516,11 +2433,10 @@ async function saveProduct(event) {
     return;
   }
   const targetId = editId || existing?.id;
-  const result = targetId
-    ? await supabase.from("products").update(values).eq("id", targetId).select().single()
-    : await supabase.from("products").insert(values).select().single();
-  if (result.error) {
-    showMessage($("#products-message"), `Could not save product: ${result.error.message}`);
+  try {
+    await saveRecord("products", values, targetId || undefined);
+  } catch (error) {
+    showMessage($("#products-message"), `Could not save product: ${error.message}`);
     return;
   }
   let loaded;
@@ -2541,17 +2457,7 @@ async function saveProduct(event) {
 async function deleteProduct(product) {
   if (!window.confirm(`Delete "${product.name}" from the product catalogue? Existing invoices and their saved product costs will not change.`)) return;
   try {
-    const { data, error } = await supabase
-      .from("products")
-      .delete()
-      .eq("id", product.id)
-      .select("id")
-      .maybeSingle();
-    if (error) throw error;
-    if (!data) {
-      showMessage($("#products-message"), "Could not delete product: it was not found or is no longer accessible.");
-      return;
-    }
+    await deleteRecord("products", product.id);
     const loaded = await loadWorkspace();
     if (!loaded) {
       showMessage($("#products-message"), "Product deleted, but the catalogue could not refresh. Reload to see the changes.");
@@ -2593,8 +2499,8 @@ async function handleProductAction(event) {
 
 async function handleAuth(event) {
   event.preventDefault();
-  if (!isConfigured()) {
-    showMessage(authMessage, "Add your Supabase project URL and publishable anon key to config.js before signing in.");
+  if (!isFirebaseConfigured || !AUTHORIZED_USER_UID) {
+    showMessage(authMessage, "Add your Firebase web app configuration and authorized Firebase user UID to config.js before signing in.");
     return;
   }
   const button = $("#auth-submit");
@@ -2603,8 +2509,7 @@ async function handleAuth(event) {
   try {
     const email = $("#auth-email").value.trim();
     const password = $("#auth-password").value;
-    const result = await supabase.auth.signInWithPassword({ email, password });
-    if (result.error) throw result.error;
+    await signInWithEmailAndPassword(auth, email, password);
   } catch (error) {
     showMessage(authMessage, error.message || "Could not complete sign-in.");
   } finally {
@@ -2837,22 +2742,21 @@ invoiceForm.addEventListener("change", () => {
 });
 invoiceForm.addEventListener("submit", (event) => event.preventDefault());
 $("#sign-out").addEventListener("click", async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) showMessage($("#overview-message"), `Could not sign out: ${error.message}`);
-  else setAuthenticated(null);
+  try {
+    await signOut(auth);
+  } catch (error) {
+    showMessage($("#overview-message"), `Could not sign out: ${error.message}`);
+  }
 });
 $("#auth-reset").addEventListener("click", async () => {
-  if (!supabase) {
-    showMessage(authMessage, "Configure Supabase before requesting a password reset.");
+  if (!auth) {
+    showMessage(authMessage, "Configure Firebase before requesting a password reset.");
     return;
   }
   const button = $("#auth-reset");
   button.disabled = true;
   try {
-    const { error } = await supabase.auth.resetPasswordForEmail($("#auth-email").value.trim(), {
-      redirectTo: window.location.href,
-    });
-    if (error) throw error;
+    await sendPasswordResetEmail(auth, $("#auth-email").value.trim());
     showMessage(authMessage, "If password recovery is enabled, a reset link will be sent to the authorized account.", true);
   } catch (error) {
     showMessage(authMessage, `Could not request a password reset: ${error.message}`);
@@ -2862,16 +2766,11 @@ $("#auth-reset").addEventListener("click", async () => {
 });
 window.addEventListener("afterprint", () => document.body.classList.remove("printing"));
 
-if (!isConfigured()) {
+if (!isFirebaseConfigured || !AUTHORIZED_USER_UID) {
   $("#setup-notice").hidden = false;
-  $("#setup-notice").textContent = "Cloud sync is almost ready. Add your Supabase project URL and publishable anon key in config.js, and apply the database setup in supabase/schema.sql.";
+  $("#setup-notice").textContent = "Firebase setup is almost ready. Add your Firebase web app configuration and authorized user UID to config.js, then deploy the Firebase security rules.";
 } else {
-  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  supabase.auth.onAuthStateChange((_event, session) => {
-    window.setTimeout(() => { applyAuthSession(session); }, 0);
-  });
-  supabase.auth.getSession().then(({ data, error }) => {
-    if (error) showMessage(authMessage, `Could not restore your session: ${error.message}`);
-    applyAuthSession(data?.session || null);
+  onAuthStateChanged(auth, (user) => {
+    window.setTimeout(() => { applyAuthSession(user); }, 0);
   });
 }

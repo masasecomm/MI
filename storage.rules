@@ -1,0 +1,19 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthorizedUser(userId) {
+      return request.auth != null
+        && request.auth.uid == userId
+        && userId == "8XUYgcBGMSTIGVDVXn6doSoLhw02";
+    }
+
+    match /business-logos/{userId}/{businessId}/{fileName} {
+      allow read: if isAuthorizedUser(userId);
+      allow create, update: if isAuthorizedUser(userId)
+        && request.resource.size <= 2 * 1024 * 1024
+        && (request.resource.contentType.matches('image/(png|jpeg|webp)')
+          || request.resource.contentType == 'image/svg+xml');
+      allow delete: if isAuthorizedUser(userId);
+    }
+  }
+}

@@ -1,0 +1,9 @@
+firebase-debug.log
+firebase-debug.*.log
+.firebaserc
+functions/.env*
+functions/node_modules/
+migration/node_modules/
+migration/exports/
+service-account*.json
+*-service-account*.json

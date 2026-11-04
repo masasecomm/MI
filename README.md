@@ -1,70 +1,95 @@
 # Invoices
 
-A responsive invoice app hosted as a static site on GitHub Pages. Supabase provides account sign-in and private, cross-device invoice storage.
+A responsive invoice app hosted on GitHub Pages. Firebase provides email/password sign-in, private Firestore storage, logo storage, and the server-side email function.
 
 ## What it does
 
-- Manage multiple businesses, including business contact details and an uploaded logo.
-- View an all-business dashboard and individual business dashboards with client and document visualizations.
-- Compare each business's document counts across today, this month, and this year with bar charts.
-- Save client names separately from company names, associate one client with multiple companies, and reuse those client-company details on documents.
-- Review each client's quotes and invoices alongside total paid and outstanding balances.
-- Create, edit, search, print, and delete quotes and invoices; convert a quote to an invoice or start an unpaid draft invoice from an existing invoice.
-- Delete businesses and their associated records, remove saved clients while keeping their historical documents, and delete documents with their payment history after confirmation.
-- Number invoices sequentially by issue date (`INV-yyyy-mm-dd-1`) or, when a saved client is selected, by client (`INV-Client-Name-1`). Existing documents keep their assigned numbers.
-- Automatically save complete document drafts and notes as you edit them.
-- Automatically remember line-item products, descriptions, selling prices, and unit costs in the business catalogue for reuse.
-- Review product quantities sold, customer-by-customer sales, recorded costs, and gross profit; add catalogue products to new invoices.
-- Review workspace-wide revenue, collections, outstanding balances, company sales, and product profitability on the Reports page.
-- Find saved products regardless of capitalization, and avoid duplicate catalogue entries that differ only by case. Update or remove catalogue entries without changing historical invoice lines.
-- Add line items, tax, currency, status, dates, and notes.
-- Add editable estimate and invoice terms; converting an estimate switches to the default invoice payment terms.
-- Record multiple dated part-payments, calculate a deposit as a percentage of the remaining balance, and show paid percentage, amount received, and balance due on documents.
-- Display a paid or partially-paid stamp on invoice previews, printed documents, downloaded PDFs, and emailed PDFs.
-- Apply discounts as a percentage or fixed amount. A negative discount amount is treated as a surcharge.
-- Calculate totals and directly download quotes and invoices as PDFs, or print them.
-- Email a saved quote or invoice PDF directly to the client's email address.
-- Restrict sign-in and database access to the authorized account, with Supabase authentication and row-level security.
+- Manage businesses, clients, and reusable products.
+- Create, edit, search, print, and download quotes and invoices.
+- Save document drafts automatically and reuse saved product prices and costs.
+- Record dated invoice part-payments and calculate balances.
+- Review workspace-wide sales, payments, outstanding balances, and product profitability.
+- Send a saved quote or invoice PDF to the client by email.
+- Restrict app data, uploaded logos, and email sending to the authorized Firebase user.
 
-The default currency is South African rand (ZAR), displayed with the `R` symbol. Change the currency code on each invoice when needed. The workspace uses the available screen width and adapts to mobile layouts.
+The default currency is South African rand (ZAR). The existing Supabase schema and function remain in `supabase/` as legacy references and are not used by the app.
 
-## Set up cloud storage
+## Create and configure Firebase
 
-1. Create a Supabase project.
-2. In the Supabase SQL Editor, run [`supabase/schema.sql`](./supabase/schema.sql). It creates the business, client-company directory, product catalogue with descriptions and unit costs, document, dated invoice-payment ledger, and logo-storage policies. If you already have this app set up, rerun the full script to add the latest fields and policies; it preserves existing records.
-3. In Supabase project settings, copy the Project URL and the publishable key (or legacy `anon` key).
-4. Add those values to [`config.js`](./config.js):
+The browser Firebase configuration and Firebase user UID in `config.js` are public. Never put a service-account key, Resend API key, or other private credential in the repository.
 
-   ```js
-   export const SUPABASE_URL = "https://your-project.supabase.co";
-   export const SUPABASE_ANON_KEY = "your-public-anon-key";
-   ```
-
-   The publishable/anon key is intended for browser use. Never put a Supabase secret or `service_role` key in this file. Row-level security is enabled for invoices; keep the policies in the SQL setup enabled.
-
-5. In Supabase Authentication settings, configure the site URL and allowed redirect URLs to include your GitHub Pages URL (for example, `https://your-user.github.io/your-repository/`). For a custom domain, add that URL too.
-6. Set the repository's default branch to `main` and push the app. In GitHub, open **Settings → Pages** and select **GitHub Actions** as the build and deployment source. The workflow in `.github/workflows/deploy.yml` deploys the site on every push to `main`.
-7. In Supabase **Authentication → Users**, create or invite the authorized account and set its password privately in the dashboard. In **Authentication → Providers → User Signups**, disable new-user signups. Then open the Pages URL and sign in with that account.
-
-Because GitHub Pages is static hosting, the Supabase URL and publishable/anon key in `config.js` are visible to site visitors. This is expected: authentication and row-level security—not hiding the public key—protect invoice data.
-
-The login UI and database policies restrict access to the authorized Supabase user ID. After updating an existing project, rerun [`supabase/schema.sql`](./supabase/schema.sql) in the Supabase SQL Editor so the client-company fields, product descriptions and costs, payment ledger, and latest policies are applied. The script requests a PostgREST schema-cache reload at the end. Never store account credentials in this repository or share them in chat.
-
-## Set up customer email
-
-Customer emails are sent by a Supabase Edge Function through Resend. The Resend API key must only be stored as a Supabase function secret; never add it to `config.js` or the GitHub repository.
-
-1. Create a Resend account and verify a sending domain. Copy its API key and choose a sender address on that verified domain, such as `Invoices <invoices@your-domain.com>`.
-2. Install the Supabase CLI, sign in with `npx supabase login`, and link this repository to your project with `npx supabase link --project-ref iuuhshxpepccqjypreti`.
-3. Set the email provider secrets and deploy the function from the repository root. Redeploy this function after pulling changes so emailed PDFs include the current invoice terms and payment details:
+1. Open the [Firebase Console](https://console.firebase.google.com/) and create a project. Register a **Web app** in **Project settings → General** to get its web app configuration.
+2. In **Authentication → Sign-in method**, enable **Email/Password**. In **Authentication → Users**, add the one authorized user and set its password. Do not add a sign-up form to the app; Firestore and Storage rules still enforce the authorized UID.
+   Add `masasecomm.github.io` under **Authentication → Settings → Authorized domains** so sign-in works from GitHub Pages.
+3. Create a **Cloud Firestore** database in production mode. Create a **Cloud Storage** bucket.
+4. Put the web app settings in [`config.js`](./config.js), and set `AUTHORIZED_USER_UID` to the UID shown for the user you created.
+5. Replace `REPLACE_WITH_AUTHORIZED_FIREBASE_UID` in [`firestore.rules`](./firestore.rules) and [`storage.rules`](./storage.rules) with that same UID.
+6. Install the Firebase CLI, sign in, and select the new project:
 
    ```powershell
-   npx supabase secrets set RESEND_API_KEY=re_your_key "EMAIL_FROM=Invoices <invoices@your-domain.com>"
-   npx supabase functions deploy send-document-email
+   npm install -g firebase-tools
+   firebase login
+   firebase use --add
    ```
 
-4. In the app, save a quote or invoice with a valid client email address, then choose **Email PDF** in its document actions. Successfully emailed draft documents are marked as sent.
+7. Deploy Firestore and Storage security rules:
+
+   ```powershell
+   firebase deploy --only firestore:rules,storage
+   ```
+
+8. Configure the email function. Create `functions/.env.<project-id>` (replace `<project-id>` with the Firebase project ID) with the verified sender and authorized user UID:
+
+   ```text
+   EMAIL_FROM="Invoices <invoices@your-domain.com>"
+   AUTHORIZED_USER_UID="the-firebase-user-uid"
+   ```
+
+   Set the Resend API key as a Firebase secret and deploy the function:
+
+   ```powershell
+   firebase functions:secrets:set RESEND_API_KEY
+   firebase deploy --only functions
+   ```
+
+   Enter the Resend key only at the CLI prompt. Never put it in `config.js`, `.env` files, or Git.
+
+9. Push the repository to GitHub. The existing GitHub Actions workflow publishes the app to Pages. Open the Pages URL and sign in with the Firebase account.
+
+**Billing note:** Firebase Cloud Functions and Cloud Storage may require the Blaze (pay-as-you-go) plan. Review Firebase pricing and set budget alerts before linking billing; budget alerts are notifications, not a hard spending cap. Firestore and Authentication have their own usage quotas.
+
+## Migrate data from Supabase
+
+The app's former Supabase project (`iuuhshxpepccqjypreti`) is currently paused. Supabase reports that it cannot be resumed until the organization frees one of its two active free-project slots or upgrades. The existing records have not been copied to Firebase yet. Do not delete the old project.
+
+The migration utility imports CSV or JSON exports of all five tables and can upload exported business logos. It preserves record IDs and links while changing `user_id` to the authorized Firebase UID.
+
+1. Temporarily resume the Supabase project. Because the organization is at its free-project limit, first decide whether to upgrade or pause another project. Do not delete a project unless you have independently backed up and verified its data.
+2. Export the `businesses`, `clients`, `products`, `invoices`, and `invoice_payments` tables from Supabase as CSV or JSON. Put one file per table in `migration/exports/`, for example `businesses.csv`.
+3. Export business logo files from Supabase Storage. Put each logo at `migration/exports/logos/<old-supabase-user-uid>/<business-id>/logo.<ext>`. The importer accepts PNG, JPEG, WebP, or SVG files up to 2 MB. If a logo is not exported, its old Supabase URL will not work after cutover.
+4. Create a Firebase Admin service-account key with the permissions needed to write Firestore and Storage. Keep the downloaded JSON file outside the repository and never share it.
+5. Install the migration utility's dependencies and validate the export first:
+
+   ```powershell
+   cd migration
+   npm install
+   $env:GOOGLE_APPLICATION_CREDENTIALS = "C:\secure\firebase-adminsdk.json"
+   $env:FIREBASE_STORAGE_BUCKET = "your-storage-bucket-name"
+   npm run import -- .\exports <firebase-user-uid>
+   ```
+
+6. Review the counts and any logo warnings. Run the same command with `--apply` to import:
+
+   ```powershell
+   npm run import -- .\exports <firebase-user-uid> --apply
+   ```
+
+   The importer checks record links before writing and uses the existing record IDs. Import once into the new Firebase project; running it again overwrites records with matching IDs.
+
+7. Verify the businesses, clients, products, invoices, payments, and logos in the app before switching users to Firebase. Keep the Supabase project and its backups until the Firebase copy is verified.
+
+The importer accepts table CSV/JSON exports, not a raw Supabase database backup file. If you only have a backup, restore it to a temporary Postgres database and export the five tables and logo files first.
 
 ## Local preview
 
-Serve the repository root with any static HTTP server, then open its local URL. ES modules and authentication do not work reliably from a `file://` URL. Cloud features require the Supabase setup above and an allowed redirect URL.
+Serve the repository root with a static HTTP server and open its local URL. ES modules and Firebase authentication do not work reliably from a `file://` URL. Add the local preview URL to Firebase Authentication's authorized domains when needed.
